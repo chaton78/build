@@ -20,7 +20,7 @@ TZDATA=$(cat /etc/timezone) # Timezone for target is taken from host or defined 
 USEALLCORES=yes # Use all CPU cores for compiling
 EXIT_PATCHING_ERROR="" # exit patching if failed
 [[ -z $HOST ]] && HOST="$(echo "$BOARD" | cut -f1 -d-)" # set hostname to the board
-ROOTFSCACHE_VERSION=11
+ROOTFSCACHE_VERSION=12
 CHROOT_CACHE_VERSION=6
 BUILD_REPOSITORY_URL=$(git remote get-url $(git remote 2>/dev/null) 2>/dev/null)
 BUILD_REPOSITORY_COMMIT=$(git describe --match=d_e_a_d_b_e_e_f --always --dirty 2>/dev/null)
@@ -75,7 +75,7 @@ MAINLINE_UBOOT_DIR='u-boot'
 [[ -z $OFFSET ]] && OFFSET=4 # offset to 1st partition (we use 4MiB boundaries by default)
 ARCH=armhf
 KERNEL_IMAGE_TYPE=zImage
-SERIALCON=ttyS0
+[[ -z $SERIALCON ]] && SERIALCON=ttyS0
 CAN_BUILD_STRETCH=yes
 [[ -z $CRYPTROOT_SSH_UNLOCK ]] && CRYPTROOT_SSH_UNLOCK=yes
 [[ -z $CRYPTROOT_SSH_UNLOCK_PORT ]] && CRYPTROOT_SSH_UNLOCK_PORT=2022
@@ -102,7 +102,7 @@ if [[ -f $USERPATCHES_PATH/sources/$LINUXFAMILY.conf ]]; then
 fi
 
 # dropbear needs to be configured differently
-[[ $CRYPTROOT_ENABLE == yes && ($RELEASE == jessie || $RELEASE == xenial) ]] && exit_with_error "Encrypted rootfs is not supported in Jessie or Xenial"
+[[ $CRYPTROOT_ENABLE == yes && $RELEASE == xenial ]] && exit_with_error "Encrypted rootfs is not supported in Xenial"
 
 [[ $RELEASE == stretch && $CAN_BUILD_STRETCH != yes ]] && exit_with_error "Building Debian Stretch images with selected kernel is not supported"
 [[ $RELEASE == bionic && $CAN_BUILD_STRETCH != yes ]] && exit_with_error "Building Ubuntu Bionic images with selected kernel is not supported"
@@ -147,7 +147,7 @@ fi
 DEBOOTSTRAP_LIST="locales gnupg ifupdown apt-utils apt-transport-https ca-certificates bzip2 console-setup cpio cron \
 	dbus init initramfs-tools iputils-ping isc-dhcp-client kmod less libpam-systemd \
 	linux-base logrotate netbase netcat-openbsd rsyslog systemd sudo ucf udev whiptail \
-	wireless-regdb crda dmsetup rsync"
+	wireless-regdb crda dmsetup rsync tzdata"
 
 [[ $BUILD_DESKTOP == yes ]] && DEBOOTSTRAP_LIST+=" libgtk2.0-bin"
 
@@ -192,7 +192,7 @@ PACKAGE_LIST_DESKTOP="xserver-xorg xserver-xorg-video-fbdev gvfs-backends gvfs-f
 
 
 # Recommended desktop packages
-PACKAGE_LIST_DESKTOP_RECOMMENDS="mirage galculator hexchat xfce4-screenshooter network-manager-openvpn-gnome mpv fbi \
+PACKAGE_LIST_DESKTOP_SUGGESTS="mirage galculator hexchat xfce4-screenshooter network-manager-openvpn-gnome mpv fbi \
 	cups-pk-helper cups geany atril xarchiver"
 
 # Full desktop packages
@@ -201,50 +201,46 @@ PACKAGE_LIST_DESKTOP_FULL="libreoffice libreoffice-style-tango meld remmina thun
 # Release specific packages
 case $RELEASE in
 
-	jessie)
-		DEBOOTSTRAP_COMPONENTS="main"
-		[[ -z $BUILD_MINIMAL || $BUILD_MINIMAL == no ]] && PACKAGE_LIST_RELEASE=" kbd gnupg2 dirmngr sysbench"
-		PACKAGE_LIST_DESKTOP+=" paman libgcr-3-common gcj-jre-headless policykit-1-gnome eject numix-icon-theme \
-								libgnome2-perl pulseaudio-module-gconf"
-		PACKAGE_LIST_DESKTOP_RECOMMENDS+=" iceweasel pluma system-config-printer leafpad"
-	;;
-
 	xenial)
 		DEBOOTSTRAP_COMPONENTS="main"
 		[[ -z $BUILD_MINIMAL || $BUILD_MINIMAL == no ]] && PACKAGE_LIST_RELEASE="man-db sysbench"
 		PACKAGE_LIST_DESKTOP+=" paman libgcr-3-common gcj-jre-headless paprefs numix-icon-theme libgnome2-perl \
 								pulseaudio-module-gconf"
-		PACKAGE_LIST_DESKTOP_RECOMMENDS+=" chromium-browser language-selector-gnome system-config-printer-common \
+		PACKAGE_LIST_DESKTOP_SUGGESTS+=" chromium-browser language-selector-gnome system-config-printer-common \
 								system-config-printer-gnome leafpad"
 	;;
 
 	stretch)
 		DEBOOTSTRAP_COMPONENTS="main"
+		DEBOOTSTRAP_LIST+=" rng-tools"
 		[[ -z $BUILD_MINIMAL || $BUILD_MINIMAL == no ]] && PACKAGE_LIST_RELEASE="man-db kbd net-tools gnupg2 dirmngr sysbench"
 		PACKAGE_LIST_DESKTOP+=" paman libgcr-3-common gcj-jre-headless paprefs dbus-x11 libgnome2-perl pulseaudio-module-gconf"
-		PACKAGE_LIST_DESKTOP_RECOMMENDS+=" chromium system-config-printer-common system-config-printer leafpad"
+		PACKAGE_LIST_DESKTOP_SUGGESTS+=" chromium system-config-printer-common system-config-printer leafpad"
 	;;
 
 	bionic)
 		DEBOOTSTRAP_COMPONENTS="main,universe"
+		DEBOOTSTRAP_LIST+=" rng-tools"
 		[[ -z $BUILD_MINIMAL || $BUILD_MINIMAL == no ]] && PACKAGE_LIST_RELEASE="man-db kbd net-tools gnupg2 dirmngr networkd-dispatcher"
 		PACKAGE_LIST_DESKTOP+=" xserver-xorg-input-all paprefs dbus-x11 libgnome2-perl pulseaudio-module-gconf"
-		PACKAGE_LIST_DESKTOP_RECOMMENDS+=" chromium-browser system-config-printer-common system-config-printer \
+		PACKAGE_LIST_DESKTOP_SUGGESTS+=" chromium-browser system-config-printer-common system-config-printer \
 								language-selector-gnome leafpad"
 	;;
 
 	buster)
 		DEBOOTSTRAP_COMPONENTS="main"
+		DEBOOTSTRAP_LIST+=" rng-tools"
 		[[ -z $BUILD_MINIMAL || $BUILD_MINIMAL == no ]] && PACKAGE_LIST_RELEASE="man-db kbd net-tools gnupg2 dirmngr networkd-dispatcher"
 		PACKAGE_LIST_DESKTOP+=" paprefs dbus-x11 numix-icon-theme"
-		PACKAGE_LIST_DESKTOP_RECOMMENDS+=" chromium system-config-printer-common system-config-printer"
+		PACKAGE_LIST_DESKTOP_SUGGESTS+=" chromium system-config-printer-common system-config-printer"
 	;;
 
 	disco)
 		DEBOOTSTRAP_COMPONENTS="main,universe"
+		DEBOOTSTRAP_LIST+=" rng-tools"
 		[[ -z $BUILD_MINIMAL || $BUILD_MINIMAL == no ]] && PACKAGE_LIST_RELEASE="man-db kbd net-tools gnupg2 dirmngr networkd-dispatcher"
 		PACKAGE_LIST_DESKTOP+=" xserver-xorg-input-all paprefs dbus-x11 pulseaudio-module-gsettings"
-		PACKAGE_LIST_DESKTOP_RECOMMENDS+=" chromium-browser system-config-printer-common system-config-printer \
+		PACKAGE_LIST_DESKTOP_SUGGESTS+=" chromium-browser system-config-printer-common system-config-printer \
 								language-selector-gnome"
 	;;
 
@@ -265,6 +261,11 @@ if [[ -f $USERPATCHES_PATH/lib.config ]]; then
 	source "$USERPATCHES_PATH"/lib.config
 fi
 
+if [[ "$(type -t user_config)" == "function" ]]; then
+	display_alert "Invoke function with user override" "user_config" "info"
+	user_config
+fi
+
 # apt-cacher-ng mirror configurarion
 if [[ $DISTRIBUTION == Ubuntu ]]; then
 	APT_MIRROR=$UBUNTU_MIRROR
@@ -280,7 +281,7 @@ PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_RELEASE $PACKAGE_LIST_ADDITIONAL"
 	#PACKAGE_LIST_DESKTOP="${PACKAGE_LIST_DESKTOP/iceweasel/iceweasel:armhf}"
 	#PACKAGE_LIST_DESKTOP="${PACKAGE_LIST_DESKTOP/thunderbird/thunderbird:armhf}"
 #fi
-[[ $BUILD_DESKTOP == yes ]] && PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_DESKTOP $PACKAGE_LIST_DESKTOP_RECOMMENDS"
+[[ $BUILD_DESKTOP == yes ]] && PACKAGE_LIST="$PACKAGE_LIST $PACKAGE_LIST_DESKTOP $PACKAGE_LIST_DESKTOP_SUGGESTS"
 
 # remove any packages defined in PACKAGE_LIST_RM in lib.config
 if [[ -n $PACKAGE_LIST_RM ]]; then
