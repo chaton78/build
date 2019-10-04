@@ -7,7 +7,7 @@ trigger:
 - automated
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: 'ubuntu-18.04'
 
 steps:
 - script: ./compile.sh KERNEL_ONLY=yes  BOARD=orangepi3 BRANCH=next KERNEL_CONFIGURE=no
