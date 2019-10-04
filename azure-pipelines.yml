@@ -10,7 +10,7 @@ pool:
   vmImage: 'ubuntu-latest'
 
 steps:
-- script: ./compile.sh docker KERNEL_ONLY=yes  BOARD=orangepi3 BRANCH=next KERNEL_CONFIGURE=no
+- script: ./compile.sh KERNEL_ONLY=yes  BOARD=orangepi3 BRANCH=next KERNEL_CONFIGURE=no
   displayName: 'Compile'
 
 
