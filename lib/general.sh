@@ -15,6 +15,7 @@
 # fetch_from_repo
 # display_alert
 # fingerprint_image
+# distro_menu
 # addtorepo
 # repo-remove-old-packages
 # prepare_host
@@ -122,7 +123,7 @@ get_package_list_hash()
 
 # create_sources_list <release> <basedir>
 #
-# <release>: stretch|buster|xenial|bionic|disco
+# <release>: stretch|buster|xenial|bionic|disco|eoan
 # <basedir>: path to root directory
 #
 create_sources_list()
@@ -148,7 +149,7 @@ create_sources_list()
 	EOF
 	;;
 
-	xenial|bionic|disco)
+	xenial|bionic|disco|eoan)
 	cat <<-EOF > $basedir/etc/apt/sources.list
 	deb http://${UBUNTU_MIRROR} $release main restricted universe multiverse
 	#deb-src http://${UBUNTU_MIRROR} $release main restricted universe multiverse
@@ -171,6 +172,9 @@ create_sources_list()
 	else
 		echo "deb http://apt.armbian.com $RELEASE main ${RELEASE}-utils ${RELEASE}-desktop" > $SDCARD/etc/apt/sources.list.d/armbian.list
 	fi
+
+	# add local package server if defined. Suitable for development
+	[[ -n $LOCAL_MIRROR ]] && echo "deb http://$LOCAL_MIRROR $RELEASE main ${RELEASE}-utils ${RELEASE}-desktop" >> $SDCARD/etc/apt/sources.list.d/armbian.list
 
 	display_alert "Adding Armbian repository and authentication key" "/etc/apt/sources.list.d/armbian.list" "info"
 	cp $SRC/config/armbian.key $SDCARD
@@ -397,6 +401,29 @@ fingerprint_image()
 
 
 
+function distro_menu ()
+{
+# create a select menu for choosing a distribution based EXPERT status
+# also sets DISTRIBUTION_STATUS which goes to BSP package / armbian-release
+
+	for i in "${!distro_name[@]}"
+	do
+		if [[ $i == $1 ]]; then
+			if [[ "${distro_support[$i]}" != "supported" && $EXPERT != "yes" ]]; then
+				:
+			else
+				options+=("$i" "${distro_name[$i]}")
+			fi
+			DISTRIBUTION_STATUS=${distro_support[$i]}
+			break
+		fi
+	done
+
+}
+
+
+
+
 adding_packages()
 {
 # add deb files to repository if they are not already there
@@ -411,7 +438,7 @@ adding_packages()
 		aptly repo search -architectures=$arch -config=${SCRIPTPATH}config/${REPO_CONFIG} $1 'Name (% '$name'), $Version (='$version'), $Architecture (='$arch')' &>/dev/null
 		if [[ $? -ne 0 ]]; then
 			display_alert "Adding" "$name" "info"
-			aptly repo add -force-replace=true -config=${SCRIPTPATH}config/${REPO_CONFIG} $release ${f} &>/dev/null
+			aptly repo add -force-replace=true -config=${SCRIPTPATH}config/${REPO_CONFIG} $1 ${f} &>/dev/null
 		fi
 	done
 
@@ -427,7 +454,7 @@ addtorepo()
 # parameter "delete" remove incoming directory if publishing is succesful
 # function: cycle trough distributions
 
-	local distributions=("xenial" "stretch" "bionic" "buster" "disco")
+	local distributions=("xenial" "stretch" "bionic" "buster" "disco" "eoan")
 	local errors=0
 
 	for release in "${distributions[@]}"; do
@@ -538,7 +565,7 @@ addtorepo()
 
 
 repo-manipulate() {
-	local DISTROS=("xenial" "stretch" "bionic" "buster" "disco")
+	local DISTROS=("xenial" "stretch" "bionic" "buster" "disco" "eoan")
 	case $@ in
 		serve)
 			# display repository content
@@ -669,10 +696,10 @@ prepare_host()
 	local hostdeps="wget ca-certificates device-tree-compiler pv bc lzop zip binfmt-support build-essential ccache debootstrap ntpdate \
 	gawk gcc-arm-linux-gnueabihf qemu-user-static u-boot-tools uuid-dev zlib1g-dev unzip libusb-1.0-0-dev fakeroot \
 	parted pkg-config libncurses5-dev whiptail debian-keyring debian-archive-keyring f2fs-tools libfile-fcntllock-perl rsync libssl-dev \
-	nfs-kernel-server btrfs-tools ncurses-term p7zip-full kmod dosfstools libc6-dev-armhf-cross \
+	nfs-kernel-server btrfs-progs ncurses-term p7zip-full kmod dosfstools libc6-dev-armhf-cross \
 	curl patchutils python liblz4-tool libpython2.7-dev linux-base swig libpython-dev aptly acl \
 	locales ncurses-base pixz dialog systemd-container udev lib32stdc++6 libc6-i386 lib32ncurses5 lib32tinfo5 \
-	bison libbison-dev flex libfl-dev cryptsetup gpgv1 gnupg1 cpio aria2 pigz"
+	bison libbison-dev flex libfl-dev cryptsetup gpgv1 gnupg1 cpio aria2 pigz dirmngr"
 
 	local codename=$(lsb_release -sc)
 	display_alert "Build host OS release" "${codename:-(unknown)}" "info"
@@ -683,7 +710,7 @@ prepare_host()
 	#
 	# NO_HOST_RELEASE_CHECK overrides the check for a supported host system
 	# Disable host OS check at your own risk, any issues reported with unsupported releases will be closed without a discussion
-	if [[ -z $codename || "xenial bionic disco" != *"$codename"* ]]; then
+	if [[ -z $codename || "xenial bionic disco eoan" != *"$codename"* ]]; then
 		if [[ $NO_HOST_RELEASE_CHECK == yes ]]; then
 			display_alert "You are running on an unsupported system" "${codename:-(unknown)}" "wrn"
 			display_alert "Do not report any errors, warnings or other issues encountered beyond this point" "" "wrn"
@@ -696,7 +723,7 @@ prepare_host()
 		exit_with_error "Windows subsystem for Linux is not a supported build environment"
 	fi
 
-	if [[ -z $codename || "disco" == "$codename" ]]; then
+	if [[ -z $codename || "disco" == "$codename" || "eoan" == "$codename" ]]; then
 	    hostdeps="${hostdeps/lib32ncurses5 lib32tinfo5/lib32ncurses6 lib32tinfo6}"
 	fi
 
@@ -733,8 +760,10 @@ prepare_host()
 		display_alert "Updating from external repository" "aptly" "info"
 		if [ x"" != x$http_proxy ]; then
 			apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options http-proxy=$http_proxy --recv-keys ED75B5A4483DA07C >/dev/null 2>&1
+			apt-key adv --keyserver pool.sks-keyservers.net --keyserver-options http-proxy=$http_proxy --recv-keys ED75B5A4483DA07C >/dev/null 2>&1
 		else
 			apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys ED75B5A4483DA07C >/dev/null 2>&1
+			apt-key adv --keyserver pool.sks-keyservers.net --recv-keys ED75B5A4483DA07C >/dev/null 2>&1
 		fi
 		echo "deb http://repo.aptly.info/ nightly main" > /etc/apt/sources.list.d/aptly.list
 	else
@@ -779,6 +808,9 @@ prepare_host()
 	fi
 	mkdir -p $DEST/debs-beta/extra $DEST/debs/extra $DEST/{config,debug,patch} $USERPATCHES_PATH/overlay $SRC/cache/{sources,toolchains,utility,rootfs} $SRC/.tmp
 
+	# create patches directory structure under USERPATCHES_PATH
+	find $SRC/patch -maxdepth 2 -type d ! -name . | sed "s%/.*patch%/$USERPATCHES_PATH%" | xargs mkdir -p
+
 	display_alert "Checking for external GCC compilers" "" "info"
 	# download external Linaro compiler and missing special dependencies since they are needed for certain sources
 
@@ -798,6 +830,8 @@ prepare_host()
 		"https://dl.armbian.com/_toolchains/gcc-linaro-7.4.1-2019.02-x86_64_arm-eabi.tar.xz"
 		"https://dl.armbian.com/_toolchains/gcc-linaro-7.4.1-2019.02-x86_64_arm-linux-gnueabi.tar.xz"
 		"https://dl.armbian.com/_toolchains/gcc-linaro-7.4.1-2019.02-x86_64_aarch64-linux-gnu.tar.xz"
+		"https://dl.armbian.com/_toolchains/gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf.tar.xz"
+		"https://dl.armbian.com/_toolchains/gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu.tar.xz"
 		)
 
 	for toolchain in ${toolchains[@]}; do
